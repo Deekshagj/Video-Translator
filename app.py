@@ -1,93 +1,121 @@
-# coding=utf8
 from gtts import gTTS
 import gradio as gr
 import os
 import speech_recognition as sr
-from googletrans import Translator, constants
-from pprint import pprint
-from moviepy.editor import *
-def video_to_translate(file_obj,initial_language,final_language):
-# Insert Local Video File Path
-    videoclip = VideoFileClip(file_obj.name)
-    # Insert Local Audio File Path
-    videoclip.audio.write_audiofile("test.wav",codec='pcm_s16le')
-# initialize the recognizer
-    r = sr.Recognizer()
+from googletrans import Translator
+from moviepy.editor import VideoFileClip, CompositeAudioClip, AudioFileClip
+from pydub import AudioSegment
+from pydub.playback import play
 
-    if initial_language == "English":
-        lang_in='en-US'
-    elif initial_language == "Italian":
-        lang_in='it-IT'
-    elif initial_language == "Spanish":
-        lang_in='es-MX'
-    elif initial_language == "Russian":
-        lang_in='ru-RU'
-    elif initial_language == "German":
-        lang_in='de-DE'
-    elif initial_language == "Japanese":
-        lang_in='ja-JP'
-    elif initial_language == "Portuguese":
-        lang_in='pt-BR'
-    # open the file
-    with sr.AudioFile("test.wav") as source:
-        # listen for the data (load audio to memory)
-        audio_data = r.record(source)
-        # recognize (convert from speech to text)
-        text = r.recognize_google(audio_data, language = lang_in)
+def video_to_translate(file_obj, initial_language, final_language):
+    try:
+        # Extract audio from video
+        videoclip = VideoFileClip(file_obj.name)
+        audio_path = "temp_audio.wav"
+        videoclip.audio.write_audiofile(audio_path, codec='pcm_s16le')
 
-    if final_language == "English":
-        lang='en'
-    elif final_language == "Italian":
-        lang='it'
-    elif final_language == "Spanish":
-        lang='es'
-    elif final_language == "Russian":
-        lang='ru'
-    elif final_language == "German":
-        lang='de'
-    elif final_language == "Japanese":
-        lang='ja'
-    elif final_language == "Portuguese":
-        lang='pt'                  
-    print(lang)
-    # init the Google API translator
-    translator = Translator()
-    translation = translator.translate(text, dest=lang)
-    #translation.text
-    trans=translation.text
-    myobj = gTTS(text=trans, lang=lang, slow=False) 
-    myobj.save("audio.wav") 
-    # loading audio file
-    audioclip = AudioFileClip("audio.wav")
-    
-    # adding audio to the video clip
-    new_audioclip = CompositeAudioClip([audioclip])
-    videoclip.audio = new_audioclip
-    new_video="video_translated_"+lang+".mp4"
-    videoclip.write_videofile(new_video)
-    #return 'audio.wav'
-    return new_video
+        # Initialize recognizer
+        r = sr.Recognizer()
+        language_map = {
+            "English": 'en-US',
+            "Italian": 'it-IT',
+            "Spanish": 'es-MX',
+            "Russian": 'ru-RU',
+            "German": 'de-DE',
+            "Japanese": 'ja-JP',
+            "Portuguese": 'pt-BR',
+            "Kannada": 'kn-IN',
+            "Gujarati": 'gu-IN',
+            "Marathi": 'mr-IN',
+            "Tamil": 'ta-IN',
+            "Malayalam": 'ml-IN',
+            "Telugu": 'te-IN',
+            "Punjabi": 'pa-IN',
+            "Bengali": 'bn-IN',
+            "Bhojpuri": 'bho-IN'
+        }
 
-initial_language = gr.inputs.Dropdown(["English","Italian","Japanese","Russian","Spanish","German","Portuguese"])
-final_language = gr.inputs.Dropdown([ "Russian","Italian","Spanish","German","English","Japanese","Portuguese"])
+        # Open the audio file
+        with sr.AudioFile(audio_path) as source:
+            audio_data = r.record(source)
+            text = r.recognize_google(audio_data, language=language_map[initial_language])
 
+        # Translate text
+        lang_map = {
+            "English": 'en',
+            "Italian": 'it',
+            "Spanish": 'es',
+            "Russian": 'ru',
+            "German": 'de',
+            "Japanese": 'ja',
+            "Portuguese": 'pt',
+            "Kannada": 'kn',
+            "Gujarati": 'gu',
+            "Marathi": 'mr',
+            "Tamil": 'ta',
+            "Malayalam": 'ml',
+            "Telugu": 'te',
+            "Punjabi": 'pa',
+            "Bengali": 'bn',
+            "Bhojpuri": 'bho'
+        }
 
-gr.Interface(fn = video_to_translate,
-            inputs = ['file',initial_language,final_language],
-            outputs = 'video', 
-            verbose = True,
-            title = 'Video Translator',
-            description = 'A simple application that translates from English, Italian, Japanese, Russian, Spanish, and German video files to  Italian, Spanish, Russian, English and Japanese. Upload your own file, or click one of the examples to load them. Wait one minute to process.',
-            article = 
-                        '''<div>
-                            <p style="text-align: center"> All you need to do is to upload the mp4 file and hit submit, then wait for compiling. After that click on Play/Pause for listing to the video. The video is saved in an mp4 format.
-                            For more information visit <a href="https://ruslanmv.com/">ruslanmv.com</a>
-                            </p>
-                        </div>''',
-            examples=[['obama.mp4',"English",'Spanish'],
-                      ['obama.mp4',"English",'Italian'],
-                      ['obama.mp4',"English",'German'],
-                      ['obama.mp4',"English",'Japanese'],
-                      ['obama.mp4',"English",'Portuguese']
-                    ]         
-            ).launch()
+        translator = Translator()
+        translation = translator.translate(text, dest=lang_map[final_language])
+        trans_text = translation.text
+
+        # Text to speech
+        audio_output_path = "translated_audio.wav"
+        tts = gTTS(text=trans_text, lang=lang_map[final_language], slow=False)
+        tts.save(audio_output_path)
+
+        # Synchronize the audio length
+        original_audio = AudioSegment.from_wav(audio_path)
+        translated_audio = AudioSegment.from_wav(audio_output_path)
+
+        # Match the length of the translated audio to the original audio
+        if len(translated_audio) < len(original_audio):
+            translated_audio = translated_audio + AudioSegment.silent(duration=(len(original_audio) - len(translated_audio)))
+        elif len(translated_audio) > len(original_audio):
+            translated_audio = translated_audio[:len(original_audio)]
+
+        translated_audio.export(audio_output_path, format="wav")
+
+        # Add translated audio to video
+        audioclip = AudioFileClip(audio_output_path)
+        new_audioclip = CompositeAudioClip([audioclip])
+        videoclip.audio = new_audioclip
+        new_video = f"video_translated_{lang_map[final_language]}.mp4"
+        videoclip.write_videofile(new_video)
+
+        # Clean up temporary files
+        os.remove(audio_path)
+        os.remove(audio_output_path)
+
+        return new_video
+    except Exception as e:
+        return str(e)
+
+initial_language = gr.Dropdown(
+    ["English", "Italian", "Japanese", "Russian", "Spanish", "German", "Portuguese", "Kannada", "Gujarati", "Marathi", "Tamil", "Malayalam", "Telugu", "Punjabi", "Bengali", "Bhojpuri"], 
+    label="Initial Language"
+)
+final_language = gr.Dropdown(
+    ["Russian", "Italian", "Spanish", "German", "English", "Japanese", "Portuguese", "Kannada", "Gujarati", "Marathi", "Tamil", "Malayalam", "Telugu", "Punjabi", "Bengali", "Bhojpuri"], 
+    label="Final Language"
+)
+
+gr.Interface(
+    fn=video_to_translate,
+    inputs=[gr.File(), initial_language, final_language],
+    outputs=gr.Video(),
+    title='Video Translator',
+    description='A simple application that translates video files. Upload your own file and wait for processing.',
+    article='''
+        <div>
+            <p style="text-align: center"> All you need to do is to upload the mp4 file and hit submit, then wait for compiling. After that click on Play/Pause for listening to the video. The video is saved in an mp4 format.
+            For more information visit <a href="https://ruslanmv.com/">ruslanmv.com</a>
+            </p>
+        </div>
+    ''',
+).launch()
